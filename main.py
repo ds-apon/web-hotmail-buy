@@ -1,11 +1,12 @@
 from flask import Flask, render_template_string, request
 import requests
 import os
+import time
 
 app = Flask(__name__)
 
-API_KEY = os.getenv("API_KEY")  # Railway Environment Variable
-PRODUCT_ID = 177  # এখানে Hotmail product ID দিন
+API_KEY = os.getenv("API_KEY")
+PRODUCT_ID = 177  # আপনার Hotmail product ID
 
 HTML = """
 <!DOCTYPE html>
@@ -16,43 +17,40 @@ HTML = """
 </head>
 <body style="font-family:Arial;text-align:center;padding:50px;">
 
-    <h2>Hotmail Buyer</h2>
+<h2>Hotmail Buyer</h2>
 
-    <form method="POST">
-        <button type="submit" style="padding:12px 20px;">
-            Buy Hotmail
-        </button>
-    </form>
+<form method="POST">
+    <button type="submit" style="padding:12px 20px;">
+        Buy Hotmail
+    </button>
+</form>
 
-    {% if email %}
-    <div style="margin-top:30px;">
-        <input
-            type="text"
-            id="hotmail"
-            value="{{ email }}"
-            readonly
-            style="width:350px;padding:10px;"
-        >
+{% if email %}
+<div style="margin-top:30px;">
+    <input
+        type="text"
+        id="hotmail"
+        value="{{ email }}"
+        readonly
+        style="width:350px;padding:10px;"
+    >
 
-        <button onclick="copyEmail()">
-            Copy
-        </button>
-    </div>
-    {% endif %}
+    <button onclick="copyEmail()">
+        Copy
+    </button>
+</div>
+{% endif %}
 
-    {% if error %}
-    <p style="color:red;">
-        {{ error }}
-    </p>
-    {% endif %}
+{% if error %}
+<p style="color:red;">
+    {{ error }}
+</p>
+{% endif %}
 
 <script>
 function copyEmail() {
-    const text =
-        document.getElementById("hotmail").value;
-
+    const text = document.getElementById("hotmail").value;
     navigator.clipboard.writeText(text);
-
     alert("Copied!");
 }
 </script>
@@ -67,11 +65,12 @@ def home():
     email = None
     error = None
 
-    if request.method == "POST":
+    if request.method == "POST": 
 
         try:
 
-            response = requests.post(
+            # BUY ORDER
+            buy_response = requests.post(
                 "https://bulkmail.shop/api/v2/orders",
                 headers={
                     "X-API-Key": API_KEY,
@@ -84,11 +83,32 @@ def home():
                 timeout=30
             )
 
-            data = response.json()
+            buy_data = buy_response.json()
 
-            if data.get("success"):
+            if not buy_data.get("success"):
+                error = str(buy_data)
 
-                stock_items = data["data"].get(
+            else:
+
+                order_id = buy_data["data"]["id"]
+
+                # wait for stock delivery
+                time.sleep(1)
+
+                # GET ORDER DETAILS
+                details_response = requests.get(
+                    f"https://bulkmail.shop/api/v2/orders/{order_id}",
+                    headers={
+                        "X-API-Key": API_KEY
+                    },
+                    timeout=30
+                )
+
+                details_data = details_response.json()
+
+                print(details_data)
+
+                stock_items = details_data["data"].get(
                     "stock_items",
                     []
                 )
@@ -97,15 +117,15 @@ def home():
 
                     stock = stock_items[0]
 
+                    # email|pass|token -> only email
                     email = stock.split("|")[0]
 
                 else:
+
                     error = "No stock received"
 
-            else:
-                error = str(data)
-
         except Exception as e:
+
             error = str(e)
 
     return render_template_string(
